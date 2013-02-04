@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 visible="false" hideEffect="Fade" showEffect="Fade">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import com.greensock.TweenLite;
+			
+			
+			public function show(delay:int = 2, label:String = null, state:String = "completed"):void
+			{
+				currentState = state;
+				if(label) {
+					str.text = label;
+				}
+				visible = true;
+				if(delay > 0) {
+				TweenLite.delayedCall(delay, function():void{visible=false});
+				}
+			}
+			
+			public function hide():void
+			{
+				visible = false;
+			}
+			
+		]]>
+	</fx:Script>
+	<s:states>
+		<s:State name="completed"/>
+		<s:State name="working"/>
+		<s:State name="error"/>
+	</s:states>
+		<s:Rect radiusX="8" width="100%" height="100%">
+			<s:fill>
+				<s:SolidColor color="0" alpha=".8"/>
+			</s:fill>
+		</s:Rect>
+		<s:VGroup horizontalAlign="center"
+				  paddingBottom="8" paddingLeft="8" paddingRight="8" paddingTop="8">
+			<s:BusyIndicator includeIn="working" width="64" height="64" symbolColor="0xFFFFFF" />
+			<s:BitmapImage includeIn="completed" source="@Embed(source='../assets/icons/checkmark_64.png')"/>
+			<s:BitmapImage includeIn="error" source="@Embed(source='../assets/icons/warning1_64.png')"/>
+			<s:Label id="str" text.working="Working" maxWidth="180"
+					          text.completed="Completed!" color="0xFFFFFF"/>
+		</s:VGroup>
+</s:Group>

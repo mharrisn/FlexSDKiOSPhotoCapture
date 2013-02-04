@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:local="*"
+	    title="Photo Sender Demo">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import com.marlonharrison.util.ExifReader;
+			import com.marston.utils.URLRequestWrapper;
+			
+			import ru.inspirit.net.MultipartURLLoader;
+			
+			
+			/* CHOOSE PHOTO FROM LIBRARY OPTION...
+			We have FileReference here only for debugging purposes
+			*/
+			protected var ref:FileReference;
+			protected var cameraRoll:CameraRoll = new CameraRoll();
+			
+			protected function choosePhoto():void
+			{
+				if( CameraRoll.supportsBrowseForImage )
+				{
+					cameraRoll.addEventListener( MediaEvent.SELECT, imageSelected );
+					cameraRoll.addEventListener( Event.CANCEL, browseCanceled );
+					cameraRoll.addEventListener( ErrorEvent.ERROR, mediaError );
+					cameraRoll.browseForImage();
+				}
+				else
+				{
+					ref  = new FileReference();
+					ref.addEventListener(Event.COMPLETE, fileLoadHandler);
+					ref.addEventListener(Event.SELECT, fileSelectHandler);
+					ref.browse();
+					trace( "Image browsing is not supported on this device.");
+				}
+				
+			}
+			
+			private function fileSelectHandler(e:Event):void
+			{	
+				ref.load();	
+			}
+			
+			private function fileLoadHandler(e:Event):void
+			{
+				img.source = ref.data;
+				upload(ref.data);
+			}
+			
+			protected var cameraUI:CameraUI = new CameraUI();
+			protected function takePhoto():void
+			{
+				if( CameraUI.isSupported )
+				{
+					trace( "Initializing..." );
+					cameraUI.addEventListener( MediaEvent.COMPLETE, imageSelected );
+					cameraUI.addEventListener( Event.CANCEL, browseCanceled );
+					cameraUI.addEventListener( ErrorEvent.ERROR, mediaError );
+					cameraUI.launch( MediaType.IMAGE );
+				}
+				else
+				{
+					trace( "CameraUI is not supported.");
+				}
+			}
+			
+			
+			
+			private function browseCanceled (e:Event):void
+			{
+				trace ("Camera Roll Cancelled");
+			}
+			
+			private function mediaError (e:ErrorEvent):void
+			{
+				trace ("mediaError");
+			}
+			
+			
+			private var dataSource:IDataInput;
+			private function imageSelected( event:MediaEvent ):void
+			{
+				trace( "Media selected..." );   
+				status.show(0, "Reading Photo", "working");
+				var imagePromise:MediaPromise = event.data;
+				
+				if( imagePromise.isAsync )
+				{
+					trace( "Asynchronous media promise." );
+					dataSource = imagePromise.open();
+					var eventSource:IEventDispatcher = dataSource as IEventDispatcher;            
+					eventSource.addEventListener( Event.COMPLETE, onMediaLoaded );         
+				}
+				else
+				{
+					trace( "Synchronous media promise." );
+					dataSource = imagePromise.open();
+					readMediaData();
+				}
+			}
+			
+			private function onMediaLoaded( event:Event ):void
+			{
+				trace("Media load complete");
+				readMediaData();
+			}
+			
+			private var tempDir:File;
+			
+			private function readMediaData():void
+			{
+				var imageBytes:ByteArray = new ByteArray();
+				dataSource.readBytes( imageBytes );
+				
+				img.source = imageBytes;
+				var exifReader:ExifReader = new ExifReader(imageBytes);
+				
+				trace(exifReader.getKeys());
+				trace("Orientation:",exifReader.getValue("Orientation"));
+				
+				/* Orientation values
+				http://sylvana.net/jpegcrop/exif_orientation.html
+				1 = normal
+				3 = rotated 180 degrees (upside down)
+				6 = rotated 90 degrees CW
+				8 = rotated 90 degrees CCW
+				9 = unknown
+				*/
+				
+				var matrix:Matrix = new Matrix();
+				switch (exifReader.getValue("Orientation")){
+					case 3:
+						matrix.rotate(180);
+						break;
+					case 6:
+						matrix.rotate(90);
+						break;
+					case 8:
+						matrix.rotate(270);
+						break;
+				}
+				img.transform.matrix = matrix;
+				
+				
+				//upload(imageBytes );
+				
+			}
+			
+			private function removeTempDir():void
+			{
+				tempDir.deleteDirectory( true );
+				tempDir = null;
+			}
+			
+			protected function upload( bytes:ByteArray, fileName:String = null ):void
+			{
+				img.source = bytes;
+				status.show(0, "Sending Photo", "working");
+				if( fileName == null ) //Make a name with correct file type
+				{                
+					var now:Date = new Date();
+					fileName = "IMG" + now.fullYear + now.month +now.day +
+						now.hours + now.minutes + now.seconds + ".jpg";
+				}
+				  
+				//http://code.google.com/p/in-spirit/wiki/MultipartURLLoader
+				 var uploader:MultipartURLLoader = new MultipartURLLoader();
+				
+				uploader.addFile(bytes, fileName, "Filedata", "image/jpeg");
+				
+				
+				uploader.addVariable("param1", "UNO");
+				uploader.addVariable("param2", "DOS");
+				
+				
+				uploader.addEventListener(Event.COMPLETE, onUploadComplete);
+				uploader.addEventListener(IOErrorEvent.IO_ERROR, onUploadError);
+				
+
+				uploader.load("http://marlonharrison.com/labs/upload/do_upload"); 
+				
+			}
+			
+			private function onUploadComplete(e:Event):void
+			{
+				trace("UPLOAD RESPONSE:",e.currentTarget.loader.data);
+				var response:Object = JSON.parse(e.currentTarget.loader.data);
+				
+				if(Boolean(int(response.status)))
+					status.show(2, "Photo Uploaded!");
+					else 
+					status.show(1, "Upload Failed!", "error");	
+				
+			}
+			
+			private function onUploadError(e:IOErrorEvent):void
+			{
+				trace("IOERROR", e.text);
+				status.show(2, "Upload Error", "error");
+			}
+
+			
+			
+			
+			
+		]]>
+	</fx:Script>
+	<s:VGroup left="10" top="10" bottom="10" right="10">
+		<s:Label maxWidth="{width-20}" color="0x555555" text="Simple demo app that shows how to upload a photo from an iOS device without dealing with writing files or encoding images"/>
+	<s:Group height="100%" width="100%">
+		<s:Rect width="100%" height="100%" radiusX="8">
+			<s:fill>
+				<s:SolidColor color="0xf2f2f2"/>
+			</s:fill>
+		</s:Rect>
+		<s:Image id="img" maxWidth="{width-20}" maxHeight="{img.maxWidth*.75}"
+				 scaleMode="zoom" verticalCenter="0" horizontalCenter="0"/>
+	</s:Group>
+	<s:Button width="100%" click="choosePhoto()"
+			  label="Choose a photo from your library"/>
+	
+	<s:Button width="100%" click="takePhoto()"
+			  label="Take a new photo with your camera"/>
+	</s:VGroup>
+	
+	<local:StatusInterstitial id="status" horizontalCenter="0" verticalCenter="0"/>
+</s:View>
